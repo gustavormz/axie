@@ -1,7 +1,10 @@
 import {
   groupByByProperty,
-  executeGraphQuery
-} from './utils';
+  executeGraphQuery,
+  getAxieFormatted,
+  filterByAttributes
+} from './utils.js';
+import { CLASSES } from './constants.js';
 
 const getLatestAxiesSold = async ({
   from = 0,
@@ -52,7 +55,7 @@ const getBriefAxieList = async ({
   }
 }) => {
   try {
-    const query = `query GetAxieBriefList($auctionType: AuctionType, $criteria: AxieSearchCriteria, $from: Int, $sort: SortBy, $size: Int, $owner: String) {\n  axies(auctionType: $auctionType, criteria: $criteria, from: $from, sort: $sort, size: $size, owner: $owner) {\n    total\n    results {\n      ...AxieBrief\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment AxieBrief on Axie {\n  id\n  name\n  stage\n  class\n  breedCount\n  image\n  title\n  battleInfo {\n    banned\n    __typename\n  }\n  auction {\n    currentPrice\n    currentPriceUSD\n    __typename\n  }\n  parts {\n    id\n    name\n    class\n    type\n    specialGenes\n    __typename\n  }\n  __typename\n}\n`;
+    const query = `query GetAxieBriefList($auctionType: AuctionType, $criteria: AxieSearchCriteria, $from: Int, $sort: SortBy, $size: Int, $owner: String) {\n  axies(auctionType: $auctionType, criteria: $criteria, from: $from, sort: $sort, size: $size, owner: $owner) {\n    total\n    results {\n      ...AxieBrief\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment AxieBrief on Axie {\n  id\n  name\n  stage\n  class\n  breedCount\n  genes\n pureness\n title\n  battleInfo {\n    banned\n    __typename\n  }\n  auction {\n    currentPrice\n    currentPriceUSD\n    __typename\n  }\n  parts {\n    id\n    name\n    class\n    type\n    specialGenes\n    __typename\n  }\n  __typename\n}\n`;
     const operationName = `GetAxieBriefList`;
     const variables = {
       auctionType,
@@ -63,9 +66,30 @@ const getBriefAxieList = async ({
     };
 
     const response = await executeGraphQuery({ query, operationName, variables });
+    const { total, results } = response.data.axies;
 
+    return {
+      total,
+      results
+    };
+  } catch (e) {
+    console.error(e);
+    return {
+      total: 0,
+      results: []
+    };
+  }
+};
+
+const getAxieInfoMarket = async ({
+  axieId
+}) => {
+  try {
+    const query = `query GetAxieDetail($axieId: ID!) {\n  axie(axieId: $axieId) {\n    ...AxieDetail\n    __typename\n  }\n}\n\nfragment AxieDetail on Axie {\n  id\n  image\n  class\n  chain\n  name\n  genes\n  owner\n  birthDate\n  bodyShape\n  class\n  sireId\n  sireClass\n  matronId\n  matronClass\n  stage\n  title\n  breedCount\n  level\n  figure {\n    atlas\n    model\n    image\n    __typename\n  }\n  parts {\n    ...AxiePart\n    __typename\n  }\n  stats {\n    ...AxieStats\n    __typename\n  }\n  auction {\n    ...AxieAuction\n    __typename\n  }\n  ownerProfile {\n    name\n    __typename\n  }\n  battleInfo {\n    ...AxieBattleInfo\n    __typename\n  }\n  children {\n    id\n    name\n    class\n    image\n    title\n    stage\n    __typename\n  }\n  __typename\n}\n\nfragment AxieBattleInfo on AxieBattleInfo {\n  banned\n  banUntil\n  level\n  __typename\n}\n\nfragment AxiePart on AxiePart {\n  id\n  name\n  class\n  type\n  specialGenes\n  stage\n  abilities {\n    ...AxieCardAbility\n    __typename\n  }\n  __typename\n}\n\nfragment AxieCardAbility on AxieCardAbility {\n  id\n  name\n  attack\n  defense\n  energy\n  description\n  backgroundUrl\n  effectIconUrl\n  __typename\n}\n\nfragment AxieStats on AxieStats {\n  hp\n  speed\n  skill\n  morale\n  __typename\n}\n\nfragment AxieAuction on Auction {\n  startingPrice\n  endingPrice\n  startingTimestamp\n  endingTimestamp\n  duration\n  timeLeft\n  currentPrice\n  currentPriceUSD\n  suggestedPrice\n  seller\n  listingIndex\n  state\n  __typename\n}\n`;
+    const operationName = `GetAxieDetail`;
+    const variables = { axieId };
+    const response = await executeGraphQuery({ operationName, query, variables });
     console.log(response);
-
   } catch (e) {
     console.error(e);
   }
@@ -76,6 +100,43 @@ const getBriefAxieList = async ({
   size: 20
 }); */
 
-getBriefAxieList({
-  size: 100
-});
+/*getBriefAxieList({
+  size: 100,
+  criteria: {
+    classes: [CLASSES.reptile]
+  }
+}); */
+
+const getAllAxiesOnSale = async ({
+  size = 100
+}) => {
+  try {
+    let max = 30000, axies = [];
+    const axiesByClasses = {};
+
+    for (let axieClass of ['Reptile']) {
+      console.log(`Getting ${axieClass}`);
+      for (let from = 0; from < max; from += size) {
+        try {
+          const { total, results } = await getBriefAxieList({
+            from,
+            size,
+            criteria: { classes: [axieClass] }
+          });
+          max = total;
+          axies = [...axies, ...results];
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      axiesByClasses[axieClass] = axies;
+    }
+    const filteredAxies = filterByAttributes({axies: axiesByClasses.Reptile.map(item => getAxieFormatted(item)), filters: { quality: 100 } });
+    console.log(filteredAxies.length);
+    console.log(filteredAxies[0]);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+getAllAxiesOnSale({});
