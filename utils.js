@@ -222,6 +222,9 @@ const filterByAttributes = ({
       } else if (key === 'quality') {
         match = axie[key] === value;
       }
+      if (!match) {
+        break;
+      }
     }
     if (match === true) {
       filteredAxies.push(axie);
@@ -230,9 +233,102 @@ const filterByAttributes = ({
   return filteredAxies;
 };
 
+const calculatePercentage = ({
+  fatherGenes,
+  motherGenes
+}) => {
+  const genMap = {};
+
+  for (let [genType, gen] of Object.entries(fatherGenes)) {
+    if (genType === 'mystic') {
+      continue;
+    }
+    const { partId } = gen;
+    if (genMap[partId]) {
+      genMap[partId] += PROBABILITIES[genType] * 100;
+    } else {
+      genMap[partId] = PROBABILITIES[genType] * 100;
+    }
+  }
+  for (let [genType, gen] of Object.entries(motherGenes)) {
+    if (genType === 'mystic') {
+      continue;
+    }
+    const { partId } = gen;
+    if (genMap[partId]) {
+      genMap[partId] += PROBABILITIES[genType] * 100;
+    } else {
+      genMap[partId] = PROBABILITIES[genType] * 100;
+    }
+  }
+  return genMap;
+};
+
+const crossesGenesByGenes = ({
+  genes,
+  crosses,
+  conditionOperator = '&'
+}) => {
+  const matches = [];
+
+  for (let cross of crosses) {
+    let match = false;
+    for (let { gen, percentage } of genes) {
+      const bodyPart = gen.split('-')[0];
+      if (cross[bodyPart][gen]) {
+        if (conditionOperator === '&' &&
+          cross[bodyPart][gen] >= percentage) {
+          match = true;
+          continue;
+        } else if (conditionOperator === '&' &&
+          cross[bodyPart][gen] < percentage) {
+          match = false;
+          break;
+        } else if (cross[bodyPart][gen] >= percentage) {
+          match = true;
+        }
+      }
+    }
+    if (match) {
+      matches.push(cross);
+    }
+  }
+  return matches;
+};
+
+const getCrossesGenesProbabilities = ({
+  axies
+}) => {
+  const crosses = [];
+  for (let i = 0; i < axies.length; i++) {
+    const father = axies[i];
+    for (let j = i + 1; j < axies.length; j++) {
+      const mother = axies[j];
+      if (father.sireId === mother.sireId || father.matronId === mother.matronId) {
+        continue;
+      }
+      const item = {
+        fatherId: father.id,
+        motherId: mother.id
+      };
+
+      for (let bodyPart of BODY_PARTS) {
+        item[bodyPart] = calculatePercentage({
+          fatherGenes: father.traits[bodyPart],
+          motherGenes: mother.traits[bodyPart]
+        });
+      }
+      crosses.push(item);
+    }
+  }
+  return crosses;
+};
+
 export {
   groupByByProperty,
   executeGraphQuery,
   getAxieFormatted,
-  filterByAttributes
+  filterByAttributes,
+  getCrossesGenesProbabilities,
+  crossesGenesByGenes
 };

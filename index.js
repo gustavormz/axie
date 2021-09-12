@@ -2,9 +2,10 @@ import {
   groupByByProperty,
   executeGraphQuery,
   getAxieFormatted,
-  filterByAttributes
+  filterByAttributes,
+  getCrossesGenesProbabilities,
+  crossesGenesByGenes
 } from './utils.js';
-import { CLASSES } from './constants.js';
 
 const getLatestAxiesSold = async ({
   from = 0,
@@ -55,7 +56,7 @@ const getBriefAxieList = async ({
   }
 }) => {
   try {
-    const query = `query GetAxieBriefList($auctionType: AuctionType, $criteria: AxieSearchCriteria, $from: Int, $sort: SortBy, $size: Int, $owner: String) {\n  axies(auctionType: $auctionType, criteria: $criteria, from: $from, sort: $sort, size: $size, owner: $owner) {\n    total\n    results {\n      ...AxieBrief\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment AxieBrief on Axie {\n  id\n  name\n  stage\n  class\n  breedCount\n  genes\n pureness\n title\n  battleInfo {\n    banned\n    __typename\n  }\n  auction {\n    currentPrice\n    currentPriceUSD\n    __typename\n  }\n  parts {\n    id\n    name\n    class\n    type\n    specialGenes\n    __typename\n  }\n  __typename\n}\n`;
+    const query = `query GetAxieBriefList($auctionType: AuctionType, $criteria: AxieSearchCriteria, $from: Int, $sort: SortBy, $size: Int, $owner: String) {\n  axies(auctionType: $auctionType, criteria: $criteria, from: $from, sort: $sort, size: $size, owner: $owner) {\n    total\n    results {\n      ...AxieBrief\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment AxieBrief on Axie {\n  id\n  name\n  stage\n  class\n  breedCount\n sireId\n matronId\n genes\n pureness\n title\n  battleInfo {\n    banned\n    __typename\n  }\n  auction {\n    currentPrice\n    currentPriceUSD\n    __typename\n  }\n  parts {\n    id\n    name\n    class\n    type\n    specialGenes\n    __typename\n  }\n  __typename\n}\n`;
     const operationName = `GetAxieBriefList`;
     const variables = {
       auctionType,
@@ -108,7 +109,9 @@ const getAxieInfoMarket = async ({
 }); */
 
 const getAllAxiesOnSale = async ({
-  size = 100
+  size = 100,
+  parts,
+  genes
 }) => {
   try {
     let max = 30000, axies = [];
@@ -121,7 +124,11 @@ const getAllAxiesOnSale = async ({
           const { total, results } = await getBriefAxieList({
             from,
             size,
-            criteria: { classes: [axieClass] }
+            criteria: {
+              classes: [axieClass],
+              breedCount: [0, 0],
+              parts
+            }
           });
           max = total;
           axies = [...axies, ...results];
@@ -131,12 +138,53 @@ const getAllAxiesOnSale = async ({
       }
       axiesByClasses[axieClass] = axies;
     }
-    const filteredAxies = filterByAttributes({axies: axiesByClasses.Reptile.map(item => getAxieFormatted(item)), filters: { quality: 100 } });
-    console.log(filteredAxies.length);
-    console.log(filteredAxies[0]);
+
+    const axiesFormatted = axiesByClasses.Reptile.map(item => getAxieFormatted(item));
+
+    const filteredAxies = filterByAttributes({
+      axies: axiesByClasses.Reptile.map(item => getAxieFormatted(item)),
+      filters: { quality: 100 }
+    });
+    const crosses = getCrossesGenesProbabilities({
+      axies: axiesFormatted
+    });
+
+    const crossesFilttered = crossesGenesByGenes({
+      crosses,
+      genes,
+      conditionOperator: '&'
+    });
+    console.log(crossesFilttered);
+    console.log(crossesFilttered.length);
+
   } catch (e) {
     console.error(e);
   }
 };
 
-getAllAxiesOnSale({});
+getAllAxiesOnSale({
+  parts: ['mouth-tiny-turtle', 'back-tri-spikes', 'tail-grass-snake'],
+  genes: [
+    { gen: 'mouth-tiny-turtle', percentage: 100 },
+    { gen: 'back-tri-spikes', percentage: 100 },
+    { gen: 'tail-grass-snake', percentage: 100 }
+  ]
+});
+
+getAllAxiesOnSale({
+  parts: ['mouth-tiny-turtle', 'back-tri-spikes', 'horn-cerastes'],
+  genes: [
+    { gen: 'mouth-tiny-turtle', percentage: 100 },
+    { gen: 'back-tri-spikes', percentage: 100 },
+    { gen: 'horn-cerastes', percentage: 100 }
+  ]
+});
+
+getAllAxiesOnSale({
+  parts: ['tail-grass-snake', 'back-tri-spikes', 'horn-cerastes'],
+  genes: [
+    { gen: 'tail-grass-snake', percentage: 100 },
+    { gen: 'back-tri-spikes', percentage: 100 },
+    { gen: 'horn-cerastes', percentage: 100 }
+  ]
+});
