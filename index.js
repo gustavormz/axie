@@ -4,7 +4,9 @@ import {
   getAxieFormatted,
   filterByAttributes,
   getCrossesGenesProbabilities,
-  crossesGenesByGenes
+  crossesGenesByGenes,
+  getCrossesGenesProbabilitiesWithAxie,
+  calculateGenesPercentageByAxie
 } from './utils.js';
 
 const getLatestAxiesSold = async ({
@@ -111,13 +113,16 @@ const getAxieInfoMarket = async ({
 const getAllAxiesOnSale = async ({
   size = 100,
   parts,
-  genes
+  genes,
+  pureness = [7],
+  classes = ['Reptile'],
+  filters = { currentPriceUSD: 0.25 * 3400 }
 }) => {
   try {
     let max = 30000, axies = [];
     const axiesByClasses = {};
 
-    for (let axieClass of ['Reptile']) {
+    for (let axieClass of classes) {
       console.log(`Getting ${axieClass}`);
       for (let from = 0; from < max; from += size) {
         try {
@@ -127,7 +132,8 @@ const getAllAxiesOnSale = async ({
             criteria: {
               classes: [axieClass],
               breedCount: [0, 0],
-              parts
+              pureness,
+              parts: parts.map(({ gen }) => gen)
             }
           });
           max = total;
@@ -142,11 +148,16 @@ const getAllAxiesOnSale = async ({
     const axiesFormatted = axiesByClasses.Reptile.map(item => getAxieFormatted(item));
 
     const filteredAxies = filterByAttributes({
-      axies: axiesByClasses.Reptile.map(item => getAxieFormatted(item)),
-      filters: { quality: 100 }
+      axies: axiesFormatted,
+      filters: { ...filters, genes: parts }
     });
+
+    console.log(filteredAxies);
+    console.log(filteredAxies.length);
+
+    return ;
     const crosses = getCrossesGenesProbabilities({
-      axies: axiesFormatted
+      axies: filteredAxies//axiesFormatted
     });
 
     const crossesFilttered = crossesGenesByGenes({
@@ -157,12 +168,38 @@ const getAllAxiesOnSale = async ({
     console.log(crossesFilttered);
     console.log(crossesFilttered.length);
 
+    return;
+    const results = getCrossesGenesProbabilitiesWithAxie({
+      axies: '',
+      axie: ''
+    });
+
   } catch (e) {
     console.error(e);
   }
 };
 
 getAllAxiesOnSale({
+  parts: [
+    { gen: 'mouth-tiny-turtle', percentage: 50 },
+    { gen: 'back-tri-spikes', percentage: 50 },
+    { gen: 'tail-grass-snake', percentage: 50 }
+  ],
+  pureness: null
+});
+
+getAllAxiesOnSale({
+  parts: [
+    { gen: 'mouth-tiny-turtle', percentage: 50 },
+    { gen: 'back-tri-spikes', percentage: 50 },
+    { gen: 'horn-incisor', percentage: 50 },
+    //{ gen: 'tail-grass-snake', percentage: 50 }
+  ],
+  pureness: null,
+  filters: { currentPriceUSD: 1100 }
+});
+
+/*getAllAxiesOnSale({
   parts: ['mouth-tiny-turtle', 'back-tri-spikes', 'tail-grass-snake'],
   genes: [
     { gen: 'mouth-tiny-turtle', percentage: 100 },
@@ -187,4 +224,4 @@ getAllAxiesOnSale({
     { gen: 'back-tri-spikes', percentage: 100 },
     { gen: 'horn-cerastes', percentage: 100 }
   ]
-});
+}); */ 

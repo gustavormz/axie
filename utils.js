@@ -193,17 +193,42 @@ const getQualityAndPureness = ({
   return { quality: Math.round((quality / MAX_QUALITY) * 100) };
 };
 
+const calculateGenesPercentageByAxie = ({
+  axie
+}) => {
+  const genMap = {};
+  for (let bodyPart of BODY_PARTS) {
+    for (let [genType, gen] of Object.entries(axie.traits[bodyPart])) {
+      if (genType === 'mystic') {
+        continue;
+      }
+      const { partId } = gen;
+      if (genMap[partId]) {
+        genMap[partId] += PROBABILITIES[genType] * 100;
+      } else {
+        genMap[partId] = PROBABILITIES[genType] * 100;
+      }
+    }
+  }
+
+  return genMap;
+};
+
 const getAxieFormatted = axie => {
   if (axie.stage < 3) {
     return axie;
   }
   const genes = genesToBin(BigInt(axie.genes))
   const traits = getTraits(genes);
-  return {
+  const axieFormatted = {
     ...axie,
     traits,
     ...getQualityAndPureness({ traits, cls: axie.class.toLowerCase() }),
     genes
+  };
+  return {
+    ...axieFormatted,
+    genMap: calculateGenesPercentageByAxie({ axie: axieFormatted })
   };
 };
 
@@ -221,6 +246,12 @@ const filterByAttributes = ({
         match = parseFloat(axie.auction.currentPriceUSD, 10) < value;
       } else if (key === 'quality') {
         match = axie[key] === value;
+      } else if (key === 'currentPriceUSD') {
+        match = axie.auction.currentPriceUSD <= value;
+      } else if (key === 'genes') {
+        for (let { gen, percentage } of value) {
+          match = match && axie.genMap[gen] >= percentage;
+        }
       }
       if (!match) {
         break;
@@ -324,11 +355,40 @@ const getCrossesGenesProbabilities = ({
   return crosses;
 };
 
+const getCrossesGenesProbabilitiesWithAxie = ({
+  axie,
+  axies
+}) => {
+  const crosses = [];
+  const father = axie;
+    for (let j = 0; j < axies.length; j++) {
+      const mother = axies[j];
+      if (father.sireId === mother.sireId || father.matronId === mother.matronId) {
+        continue;
+      }
+      const item = {
+        fatherId: father.id,
+        motherId: mother.id
+      };
+
+      for (let bodyPart of BODY_PARTS) {
+        item[bodyPart] = calculatePercentage({
+          fatherGenes: father.traits[bodyPart],
+          motherGenes: mother.traits[bodyPart]
+        });
+      }
+      crosses.push(item);
+    }
+  return crosses;
+};
+
 export {
   groupByByProperty,
   executeGraphQuery,
   getAxieFormatted,
   filterByAttributes,
   getCrossesGenesProbabilities,
-  crossesGenesByGenes
+  crossesGenesByGenes,
+  getCrossesGenesProbabilitiesWithAxie,
+  calculateGenesPercentageByAxie
 };
